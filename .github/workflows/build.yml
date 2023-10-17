@@ -5,24 +5,39 @@ on:
     inputs:
       aab_generation:
         description: 'Generate AAB'
-        required: false
+        required: true
         default: 'false'
+        options:
+          - 'true'
+          - 'false'
       build_runner_build:
         description: 'Build Runner Build'
-        required: false
+        required: true
         default: 'false'
+        options:
+          - 'true'
+          - 'false'
       change_splash:
         description: 'Change Splash'
-        required: false
+        required: true
         default: 'false'
+        options:
+          - 'true'
+          - 'false'
       i18n_generation:
         description: 'Generate i18n'
-        required: false
+        required: true
         default: 'false'
+        options:
+          - 'true'
+          - 'false'
       generate_launcher_icons:
         description: 'Generate Launcher Icons'
-        required: false
+        required: true
         default: 'false'
+        options:
+          - 'true'
+          - 'false'
       custom_app_name:
         description: 'Custom App Name (Leave empty to skip)'
         required: false
@@ -33,6 +48,15 @@ on:
 jobs:
   manual_dispatch:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        aab_generation: ${{fromJson(needs.manual_dispatch.inputs.aab_generation)}}
+        build_runner_build: ${{fromJson(needs.manual_dispatch.inputs.build_runner_build)}}
+        change_splash: ${{fromJson(needs.manual_dispatch.inputs.change_splash)}}
+        i18n_generation: ${{fromJson(needs.manual_dispatch.inputs.i18n_generation)}}
+        generate_launcher_icons: ${{fromJson(needs.manual_dispatch.inputs.generate_launcher_icons)}}
+        custom_app_name: ${{fromJson(needs.manual_dispatch.inputs.custom_app_name)}}
+        custom_package_name: ${{fromJson(needs.manual_dispatch.inputs.custom_package_name)}}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-java@v1
@@ -47,45 +71,44 @@ jobs:
 
       # Run Build Runner Build if the input is 'true'
       - name: Build Runner Build
-        if: ${{ github.event.inputs.build_runner_build == 'true' }}
+        if: ${{ matrix.build_runner_build == 'true' }}
         run: flutter packages pub run build_runner build --delete-conflicting-outputs
 
       # Change Splash if the input is 'true'
       - name: Change Splash
-        if: ${{ github.event.inputs.change_splash == 'true' }}
+        if: ${{ matrix.change_splash == 'true' }}
         run: flutter pub run flutter_native_splash:create
 
       # Generate Launcher Icons if the input is 'true'
       - name: Generate Launcher Icons
-        if: ${{ github.event.inputs.generate_launcher_icons == 'true' }}
+        if: ${{ matrix.generate_launcher_icons == 'true' }}
         run: flutter pub run flutter_launcher_icons
 
       # Change App Name if the input is 'true' and custom_app_name is provided
       - name: Change App Name
-        if: ${{ github.event.inputs.custom_app_name != '' }}
-        run: rename setAppName --value "${{ github.event.inputs.custom_app_name }}"
+        if: ${{ matrix.custom_app_name != '' }}
+        run: echo "${{ matrix.custom_app_name }}" >> $GITHUB_STATE
 
       # Change Package Name if the input is 'true' and custom_package_name is provided
       - name: Change Package Name
-        if: ${{ github.event.inputs.custom_package_name != '' }}
-        run: rename setBundleId --value "${{ github.event.inputs.custom_package_name }}"
+        if: ${{ matrix.custom_package_name != '' }}
+        run: echo "${{ matrix.custom_package_name }}" >> $GITHUB_STATE
 
       # Generate i18n if the input is 'true'
       - name: Generate i18n
-        if: ${{ github.event.inputs.i18n_generation == 'true' }}
+        if: ${{ matrix.i18n_generation == 'true' }}
         run: flutter gen-l10n
 
       - name: Generate AAB or APK
         id: generate_artifact
         run: |
-          if [ "${{ github.event.inputs.aab_generation }}" = 'true' ]; then
+          if [ "${{ matrix.aab_generation }}" = 'true' ]; then
             flutter build appbundle --release
-            echo "::set-output name=artifact_path::build/app/outputs/bundle/release/app-release.aab"
+            echo "${{ steps.generate_artifact.outputs.artifact_path }}" >> $GITHUB_OUTPUT
           else
             flutter build apk --release --split-per-abi
-            echo "::set-output name=artifact_path::build/app/outputs/flutter-apk/app-release.apk"
+            echo "${{ steps.generate_artifact.outputs.artifact_path }}" >> $GITHUB_OUTPUT
           fi
-        shell: bash
 
       - name: Push to Releases
         uses: ncipollo/release-action@v1
